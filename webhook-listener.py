@@ -4,12 +4,10 @@ import os
 
 app = Flask(__name__)
 
-REPO_FOLDER_NAME = 'USP_MiniProject'
 
 # Get the full path to the deploy script
 DEPLOY_SCRIPT_PATH = os.path.join(
-    os.getcwd(), 
-    REPO_FOLDER_NAME, 
+    os.getcwd(),  
     'deploy.sh'
 )
 
@@ -25,7 +23,7 @@ def handle_webhook():
             capture_output=True, 
             text=True, 
             check=True,
-            cwd=os.path.join(os.getcwd(), REPO_FOLDER_NAME) # Run script from repo dir
+            cwd=os.path.join(os.getcwd()) # Run script from repo dir
         )
         print(result.stdout)
         print("Deployment script executed successfully.")
