@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>GitOps Demo: {{ config.theme_name }}</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+
+<body class="{{ config.app_state }}" data-current-theme="{{ config.theme_name }}">
+    
+    <div class="animation-container">
+        <div class="tech-box tech-box-1"></div>
+        <div class="tech-box tech-box-2"></div>
+        <div class="tech-bar tech-bar-1"></div>
+        <div class="tech-bar tech-bar-2"></div>
+        <div class="tech-circle tech-circle-1"></div>
+        <div class="tech-circle tech-circle-2"></div>
+        
+        <div class="core"></div>
+    </div>
+    
+    <h1 id="main-text">{{ config.main_text }}</h1>
+
+    <script>
+        const POLLING_INTERVAL = 3000; // 3 seconds
+
+        /**
+         * This function dynamically updates the page content.
+         */
+        function updatePage(config) {
+            console.log("Theme change detected! Applying:", config.theme_name);
+            
+            // 1. Update the body class to trigger new CSS animations
+            document.body.className = config.app_state;
+
+            // 2. Update the main text
+            document.getElementById('main-text').innerText = config.main_text;
+
+            // 3. Update the page title
+            document.title = `GitOps Demo: ${config.theme_name}`;
+            
+            // 4. Update the data-attribute to prevent re-triggering
+            document.body.dataset.currentTheme = config.theme_name;
+        }
+
+        /**
+         * This function fetches the latest theme from the server.
+         */
+        async function fetchTheme() {
+            try {
+                const response = await fetch('/api/theme');
+                if (!response.ok) return;
+
+                const newConfig = await response.json();
+                const currentTheme = document.body.dataset.currentTheme;
+
+                if (newConfig.theme_name !== currentTheme) {
+                    updatePage(newConfig);
+                }
+            } catch (error) {
+                console.error("Error polling for theme:", error);
+            }
+        }
+
+        // Start polling
+        setInterval(fetchTheme, POLLING_INTERVAL);
+    </script>
+</body>
+</html>
