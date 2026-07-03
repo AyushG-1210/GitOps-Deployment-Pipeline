@@ -10,8 +10,9 @@ CONCURRENCY_LEVEL = 10
 
 # GitOps Quality Gate Thresholds
 MIN_THROUGHPUT = 100.0       # Minimum acceptable requests per second
-MAX_AVERAGE_LATENCY = 100.0  # Maximum acceptable average latency in ms
-REQUIRED_SUCCESS_RATE = 1.0  # 1.0 represents 100% success rate
+MAX_P95_LATENCY = 100.0      # Maximum acceptable p95 tail latency in ms
+MAX_P99_LATENCY = 150.0      # Maximum acceptable p99 tail latency in ms
+REQUIRED_SUCCESS_RATE = 1.0  # 100% success rate required
 
 def send_single_query(query_id):
     payload = {
@@ -43,15 +44,24 @@ with ThreadPoolExecutor(max_workers=CONCURRENCY_LEVEL) as executor:
             latencies.append(latency)
 
 total_duration = time.time() - test_start
-avg_latency = sum(latencies) / len(latencies) if latencies else float('inf')
 throughput = TOTAL_REQUESTS / total_duration
 success_rate = success_count / TOTAL_REQUESTS
+
+# Compute Percentiles
+if latencies:
+    latencies.sort()
+    p95_latency = latencies[int(len(latencies) * 0.95) - 1]
+    p99_latency = latencies[int(len(latencies) * 0.99) - 1]
+else:
+    p95_latency = float('inf')
+    p99_latency = float('inf')
 
 print("\n" + "="*40)
 print("PERFORMANCE GATE EVALUATION")
 print("="*40)
 print(f"Throughput:    {throughput:.2f} req/sec  (Target: > {MIN_THROUGHPUT})")
-print(f"Avg Latency:   {avg_latency:.2f} ms      (Target: < {MAX_AVERAGE_LATENCY})")
+print(f"p95 Latency:   {p95_latency:.2f} ms      (Target: < {MAX_P95_LATENCY})")
+print(f"p99 Latency:   {p99_latency:.2f} ms      (Target: < {MAX_P99_LATENCY})")
 print(f"Success Rate:  {success_rate * 100:.1f}%       (Target: {REQUIRED_SUCCESS_RATE * 100:.1f}%)")
 print("="*40)
 
@@ -60,11 +70,15 @@ if success_rate < REQUIRED_SUCCESS_RATE:
     sys.exit(1)
 
 if throughput < MIN_THROUGHPUT:
-    print(f"PERFORMANCE REGRESSION: Throughput fell below {MIN_THROUGHPUT} req/sec. Breaking the build.")
+    print(f"PERFORMANCE REGRESSION: Throughput fell below target. Breaking the build.")
     sys.exit(1)
 
-if avg_latency > MAX_AVERAGE_LATENCY:
-    print(f"PERFORMANCE REGRESSION: Latency exceeded {MAX_AVERAGE_LATENCY} ms. Breaking the build.")
+if p95_latency > MAX_P95_LATENCY:
+    print(f"PERFORMANCE REGRESSION: p95 tail latency exceeded limit. Breaking the build.")
+    sys.exit(1)
+
+if p99_latency > MAX_P99_LATENCY:
+    print(f"PERFORMANCE REGRESSION: p99 tail latency exceeded limit. Breaking the build.")
     sys.exit(1)
 
 print("SUCCESS: All performance regression guardrails passed safely.")
