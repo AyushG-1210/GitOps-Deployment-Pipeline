@@ -1,0 +1,42 @@
+name: PINN GitOps CI Pipeline
+
+on:
+  push:
+    branches: [ main, dev ]
+  pull_request:
+    branches: [ main, dev ]
+
+jobs:
+  compatibility-and-performance-gate:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Code
+      uses: actions/checkout@v4
+
+    - name: Set up Python Runtime
+      uses: actions/setup-python@v5
+      with:
+        python-numeric-version: '3.13'
+
+    - name: Install Test Dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install requests
+
+    - name: Build Docker Image
+      run: |
+        docker build -t pinn-inference:latest .
+
+    - name: Deploy Container Infrastructure
+      run: |
+        docker run -d -p 8000:8000 --name pinn-container pinn-inference:latest
+
+    - name: Absorb Cold-Start Delay (Graph Compilation)
+      run: |
+        echo "Allowing TorchScript graph compilation to initialize across workers..."
+        sleep 5
+
+    - name: Execute Performance Regression Guardrail
+      run: |
+        python load_server.py
