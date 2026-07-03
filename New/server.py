@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 import torch
 import torch.nn as nn
@@ -59,3 +60,6 @@ async def predict(data: CoordinateInput):
         prediction = model(input_tensor)
     
     return {"predicted_temperature": float(prediction.item())}
+
+# Mount the frontend directory to serve static assets at the root path
+app.mount("/", StaticFiles(directory="frontend", html=True), name="frontend")

@@ -17,8 +17,7 @@ RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy the server script and the trained weights into the container
-COPY server.py .
-COPY model.pt .
+COPY . .
 
 # Expose the port FastAPI runs on
 EXPOSE 8000
