@@ -1,118 +1,169 @@
-# Production-Grade PINN-Ops: Low Latency SciML Inference Engine with GitOps Continuous Validation
+# PINN-Ops: Low-Latency SciML Inference Engine with GitOps Continuous Validation
 
 ![PINN Inference Interface Demo](frontend/Demo.gif)
 
-This repository contains a production-ready, high-throughput inference service designed to serve a Physics-Informed Neural Network (PINN) spatiotemporal surrogate model. The architecture bridges deep learning with systems engineering by optimizing a raw PyTorch model into a static computation graph, deploying it within a containerized multi-worker ASGI environment, and enforcing a strict GitOps continuous validation gate.
+A production-ready inference service for a Physics-Informed Neural Network (PINN) spatiotemporal surrogate model. The stack combines a TorchScript-compiled PyTorch model, a multi-worker FastAPI/ASGI serving layer, a hardened non-root Docker container, and a GitHub Actions CI pipeline that treats performance as a blocking regression gate.
 
 ---
 
-## Architecture Blueprint
+## Project Status
 
-### 1. Compiled SciML Compute Core
-Surrogate physics models require microsecond execution speeds to be viable alternatives to traditional numerical solvers. During the application startup lifespan phase, the dynamic PyTorch model is trace-compiled using TorchScript JIT compilation against an empty coordinate tensor. This process evaluates out the Python interpreter completely, flattening the multi-layer perceptron into an optimized, serialized C++ static execution graph. This compilation bypasses the Global Interpreter Lock (GIL) and optimizes matrix evaluation directly on the host processor.
-
-### 2. High-Concurrency Asynchronous Serving Layer
-The runtime engine leverages FastAPI built on top of an Asynchronous Server Gateway Interface (ASGI) topology. To maximize CPU utilization and scale horizontally across host cores, the deployment manages four parallel Uvicorn worker processes. Incoming JSON payloads representing spatiotemporal coordinates ($x, y, t$) are validation-checked instantly via strict Pydantic models before being dispatched across available worker processes, eliminating network serialization bottlenecks and preventing query queuing.
-
-### 3. Hardened Enterprise Container Design
-The service is fully containerized using a lightweight Alpine Linux base runtime image. To defend against privilege escalation exploits within the host kernel, the runtime space drops root privileges entirely. The container establishes an isolated system group and standard non-privileged execution profile (`appuser`), maintaining strict ownership boundaries over the serialized model weights and static web layouts.
-
-### 4. GitOps Automated Continuous Validation
-The quality assurance layer treats system performance as a blocking unit test. Pushing code to target branches kicks off a headless GitHub Actions cloud runner. The pipeline orchestrates a clean build environment, launches the application container, introduces an explicit temporal delay to absorb worker graph compilation warmups, and triggers a multi-threaded parallel stress test. Rather than evaluating generic math averages, the regression gate sorts response distribution blocks to track tail anomalies. If throughput slips or tail metrics break predefined limits, the pipeline terminates the build.
+Deployed and benchmarked. The CI pipeline is active on `main`.
 
 ---
 
-## Deployment Structure
+## Architecture
 
-        [ Spatial/Temporal Inputs ] -> (x, y, t)
+```
+[ Spatial/Temporal Inputs ] -> (x, y, t)
+            |
+            v
++-----------------+
+|  Frontend (UI)  |  <- Served via FastAPI StaticFiles
++-----------------+
+            |
+            v  (Async JSON)
++------------------------------------------------------------+
+| Docker Container  (non-root: appuser / Alpine Linux)       |
+|                                                            |
+|  [ Port 8000 ]                                             |
+|       |                                                    |
+|       v                                                    |
+|  Master Uvicorn Process (load balancer)                    |
+|    |          |          |          |                      |
+|    v          v          v          v                      |
+|  Worker #1  Worker #2  Worker #3  Worker #4                |
+|    |          |          |          |                      |
+|    +----------+----+-----+----------+                      |
+|                    |                                       |
+|                    v                                       |
+|         Pydantic Input Validation                          |
+|                    |                                       |
+|                    v                                       |
+|         JIT TorchScript Engine (compiled C++ graph)        |
+|                    |                                       |
+|                    v                                       |
+|            [ Tensor Forward Pass ]                         |
++------------------------------------------------------------+
                     |
                     v
-        +-----------------+
-        |  Frontend (UI)  | -> Served via FastAPI StaticFiles Mount
-        +-----------------+
-                    |
-                    v (Async JSON Fetch Payload)
-        +------------------------------------------------------------+
-        | Docker Container Boundary (Non-Root Privileges / appuser)  |
-        |                                                            |
-        |  [ Port 8000 Inbound Gateway ]                             |
-        |            |                                               |
-        |            v                                               |
-        |   +----------------------------------------------------+   |
-        |   | Master Uvicorn Process (Load Balancer)             |   |
-        |   +----------------------------------------------------+   |
-        |        |             |               |              |      |
-        |        v             v               v              v      |
-        |   +--------+    +--------+      +--------+     +--------+  |
-        |   | Worker |    | Worker |      | Worker |     | Worker |  |
-        |   |   #1   |    |   #2   |      |   #3   |     |   #4   |  |
-        |   +--------+    +--------+      +--------+     +--------+  |
-        |        |             |               |              |      |
-        |        +-------------+-------+-------+--------------+      |
-        |                              |                             |
-        |                              v                             |
-        |                 +--------------------------+               |
-        |                 | Pydantic Input Validation|               |
-        |                 +--------------------------+               |
-        |                              |                             |
-        |                              v                             |
-        |                 +--------------------------+               |
-        |                 | JIT TorchScript Engine   |               |
-        |                 | (Compiled C++ Surrogacy) |               |
-        |                 +--------------------------+               |
-        |                              |                             |
-        |                              v                             |
-        |                     [ Tensor Forward Pass ]                |
-        |                              |                             |
-        +------------------------------|-----------------------------+
-                                        v
-                            {"predicted_temperature": float}
+        {"predicted_temperature": float}
+```
+
+### 1. Compiled Model Core
+
+Surrogate physics models need microsecond execution to be a viable alternative to classical numerical solvers. During application startup, the PyTorch model is trace-compiled via TorchScript JIT against an empty coordinate tensor. This flattens the MLP into a serialized C++ static computation graph, bypassing the Python GIL entirely and allowing direct matrix evaluation on the host processor without interpreter overhead.
+
+### 2. Async Serving Layer
+
+The runtime is FastAPI on Uvicorn's ASGI server, running four parallel worker processes to saturate available CPU cores. Incoming JSON payloads `(x, y, t)` are validated by a strict Pydantic model before dispatch, catching malformed inputs at the boundary before they touch the inference engine.
+
+### 3. Hardened Container
+
+The service runs on an Alpine Linux base image. The container drops root entirely at runtime — a dedicated `appuser` group and non-privileged user are created at build time, with strict ownership over the serialized model weights and static assets. This defends against privilege escalation exploits at the host kernel boundary.
+
+### 4. GitOps Continuous Validation
+
+Performance is treated as a first-class regression test. Every push to `main` triggers a GitHub Actions runner that:
+
+1. Builds a clean container image from scratch
+2. Launches the container and waits for worker JIT warmup to complete
+3. Fires `load_server.py` — a multi-threaded parallel stress test that sorts response distributions to track tail latency, not just averages
+4. Compares p95/p99 tail latency and throughput against hardcoded quality gates
+5. Fails the build and blocks the merge if any gate is breached
+
+The `ci.yml` workflow file is in `.github/workflows/` and can be adapted to adjust worker count, gate thresholds, or target branch triggers.
+
+---
 
 ## Performance Benchmarks
 
-The following operational metrics were verified under full parallel load simulation across concurrent thread arrays:
+Verified under full parallel load across concurrent thread arrays on the production container:
 
-| Performance Metric | Evaluation Value | Quality Gate Target | Result Status |
-| :--- | :--- | :--- | :--- |
-| **Sustained Throughput** | 616.52 req/sec | > 100.0 req/sec | Passed |
-| **p95 Tail Latency** | 21.05 ms | < 100.0 ms | Passed |
-| **p99 Tail Latency** | 24.49 ms | < 150.0 ms | Passed |
-| **Transaction Success Rate** | 100.0% | 100.0% | Passed |
+| Metric | Result | Gate | Status |
+| :--- | :---: | :---: | :---: |
+| Sustained Throughput | 616.52 req/s | > 100 req/s | ✅ Passed |
+| p95 Tail Latency | 21.05 ms | < 100 ms | ✅ Passed |
+| p99 Tail Latency | 24.49 ms | < 150 ms | ✅ Passed |
+| Transaction Success Rate | 100.0% | 100.0% | ✅ Passed |
 
 ---
 
-## Directory Taxonomy
+## Project Structure
 
-```text
+```
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitOps continuous validation workflow
+│       └── ci.yml              # CI performance validation pipeline
 ├── frontend/
-│   ├── app.js                 # Network request orchestrator 
-│   ├── Demo.gif               # Animated user interface dashboard demonstration
-│   ├── index.html             # Document structure layout
-│   └── style.css              # Typography and component styling layouts
-├── Dockerfile                 # Hardened non-root multi-worker image layout
-├── load_server.py             # Parallel stress test verification suite
-├── model.pt                   # Serialized neural network weights
-├── requirements.txt           # Explicit version-locked python dependencies
-└── server.py                  # Compiled FastAPI server orchestration engine
+│   ├── index.html              # UI layout
+│   ├── app.js                  # API fetch and render logic
+│   ├── style.css               # Styling
+│   └── Demo.gif                # Interface demo
+├── server.py                   # FastAPI app — validation, JIT inference, static serving
+├── load_server.py              # Parallel stress test and tail latency reporter
+├── Dockerfile                  # Non-root Alpine multi-worker image
+├── model.pt                    # Serialized TorchScript model weights
+└── requirements.txt            # Version-locked Python dependencies
 ```
 
-## Local Deployment Quickstart
+---
 
-1. Execute Production Image Compilation
-Compile the hardened container image using the local directory context:
-`docker build -t pinn-inference:latest .`
+## Prerequisites
 
-2. Launch the High-Concurrency Container
-Spin up the isolated container service, mapping the application gateway port directly to the host machine:
-`docker run -d -p 8000:8000 --name pinn-container pinn-inference:latest`
+- Docker (tested on 24.x)
+- Python 3.12+ (only needed to run `load_server.py` outside Docker)
+- `model.pt` — the serialized TorchScript weights must be present in the repo root before building. See [Model Weights](#model-weights) below.
 
-3. Access Internal Diagnostic Interface
-Open a secure browser window and connect directly to the active networking endpoint to evaluate live model inference loops visually:
-`http://localhost:8000`
+---
 
-4. Execute the Regression Test Suite Manually
-To stress-test your running local infrastructure container and audit system latencies under load, execute the automated verification layer directly:
-`python load_server.py`
+## Quickstart
+
+**1. Build the image**
+```bash
+docker build -t pinn-inference:latest .
+```
+
+**2. Run the container**
+```bash
+docker run -d -p 8000:8000 --name pinn-container pinn-inference:latest
+```
+
+**3. Open the UI**
+```
+http://localhost:8000
+```
+
+**4. Run the load test manually**
+```bash
+python load_server.py
+```
+
+This fires the same stress test the CI pipeline runs and prints a full latency distribution report.
+
+---
+
+## Model Weights
+
+`model.pt` is a TorchScript-serialized PINN surrogate model trained to predict spatiotemporal temperature fields `u(x, y, t)` over a unit domain. The model was trained separately and committed to the repo as a binary artifact — it is loaded and JIT-compiled at container startup.
+
+If you want to retrain or swap in a different model, the weights must be TorchScript-compatible (i.e. exported via `torch.jit.trace` or `torch.jit.script`). Update the load path in `server.py` accordingly.
+
+---
+
+## CI Pipeline Details
+
+The workflow in `.github/workflows/ci.yml` runs on every push to `main`. Key steps:
+
+```yaml
+# Simplified outline — see ci.yml for full config
+- Build Docker image
+- Start container (docker run -d ...)
+- Sleep N seconds   # absorb JIT warmup across all 4 workers
+- Run load_server.py
+- Assert: throughput > 100 req/s
+- Assert: p95 < 100ms, p99 < 150ms
+- Assert: success rate == 100%
+```
+
+To tighten or relax the gates, edit the threshold constants at the top of `load_server.py`. To change the trigger branch, update the `on: push: branches:` field in `ci.yml`.
