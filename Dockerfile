@@ -19,8 +19,14 @@ RUN pip install --no-cache-dir -r requirements.txt
 # Copy the server script and the trained weights into the container
 COPY . .
 
+# Create a non-root user and set ownership of the app directory
+RUN groupadd --system appgroup && useradd --system --gid appgroup --create-home appuser
+RUN chown -R appuser:appgroup /app
+USER appuser
+
 # Expose the port FastAPI runs on
 EXPOSE 8000
 
 # Command to run the application using Uvicorn
 CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
+
