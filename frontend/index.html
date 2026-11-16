@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>PINN Inference Server</title>
     <link rel="stylesheet" href="style.css" />
-    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.7/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="container">
@@ -24,23 +24,8 @@
         </div>
         <div class="input-group">
             <label for="input-t">Model time t</label>
-            <div class="field-help">Normalized time input for the PINN. This is converted to physical time using the selected material.</div>
+            <div class="field-help">Normalized time input for the PINN, from 0 to 1 (dimensionless).</div>
             <input type="number" id="input-t" step="0.0001" min="0" max="1" value="0.1">
-        </div>
-        <div class="input-group">
-            <label for="material-select">Material / thermal diffusivity</label>
-            <div class="field-help">Changes the material's diffusivity, which changes the conversion from model-time units to real time.</div>
-            <select id="material-select" onchange="window.handlePredict()">
-                <option value="copper">Copper</option>
-                <option value="aluminum">Aluminum</option>
-                <option value="steel">Steel</option>
-                <option value="silicon">Silicon</option>
-            </select>
-        </div>
-        <div class="input-group">
-            <label for="plate-size">Plate length L</label>
-            <div class="field-help">Characteristic plate size in meters. Used to map normalized coordinates to physical space.</div>
-            <input type="number" id="plate-size" step="0.001" min="0.001" value="0.1">
         </div>
         <div class="input-group">
             <label for="baseline-temp">Reference temperature u_ref</label>
@@ -53,8 +38,14 @@
             <input type="number" id="delta-temp" step="0.1" value="80">
         </div>
 
-        <button id="predict-button" type="button" onclick="window.handlePredict(event)">Compute Inference</button>
-        <button id="graph-button" type="button" style="margin-top: 12px;" onclick="window.runBatchPrediction()">Create Graph</button>
+        <p class="graph-note">
+            The model works in normalized coordinates (x, y, t) in [0, 1] and returns a dimensionless
+            value u. Results are shown as a temperature using T = u_ref + ΔT · u, and positions are shown
+            for a square plate with a fixed side length of 0.1 m.
+        </p>
+
+        <button id="predict-button" type="button">Compute Inference</button>
+        <button id="graph-button" type="button" style="margin-top: 12px;">Create Graph</button>
 
         <div class="result" id="resultBox">
             <div class="result-title">Predicted Temperature</div>
@@ -67,7 +58,7 @@
         <canvas id="predictionChart" height="120" style="margin-top: 20px;"></canvas>
 
         <p id="graph-note" class="graph-note">
-            The graph keeps x and y fixed and sweeps the model time t from your chosen start point toward 1.0. The chart then converts that model-time path into a physical-time axis using the selected material and plate size.
+            The graph keeps x and y fixed and sweeps the model time t from your chosen start point toward 1.0, plotting the predicted temperature at each step.
         </p>
     </div>
 

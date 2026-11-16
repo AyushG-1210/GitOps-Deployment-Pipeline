@@ -1,65 +1,29 @@
 (function () {
-    const MATERIALS = {
-        copper: { diffusivity: 1.1e-4, label: 'Copper' },
-        aluminum: { diffusivity: 8.6e-5, label: 'Aluminum' },
-        steel: { diffusivity: 1.5e-6, label: 'Steel' },
-        silicon: { diffusivity: 8.8e-5, label: 'Silicon' }
-    };
+    // Fixed plate side length (m), used only to display x/y positions in meters.
+    const PLATE_LENGTH_M = 0.1;
 
     function getPhysicalSettings() {
-        const material = document.getElementById('material-select').value;
-        const lengthScale = parseFloat(document.getElementById('plate-size').value);
         const baseline = parseFloat(document.getElementById('baseline-temp').value);
         const deltaTemp = parseFloat(document.getElementById('delta-temp').value);
 
-        return {
-            material,
-            lengthScale,
-            baseline,
-            deltaTemp
-        };
+        return { baseline, deltaTemp };
     }
 
-    function populateMaterialOptions() {
-        const materialSelect = document.getElementById('material-select');
-        if (!materialSelect) {
-            return;
-        }
-
-        materialSelect.querySelectorAll('option').forEach((option) => {
-            const material = MATERIALS[option.value];
-            if (material) {
-                option.textContent = `${material.label} (α = ${material.diffusivity.toExponential(2)} m²/s)`;
-            }
-        });
-    }
-
-    function convertToPhysicalForPrediction(rawValue, x, y, t, settings) {
-        const material = MATERIALS[settings.material] ?? MATERIALS.copper;
-        const tau = (settings.lengthScale ** 2) / material.diffusivity;
-        const tReal = tau * t;
-        const xReal = settings.lengthScale * x;
-        const yReal = settings.lengthScale * y;
-        const uReal = settings.baseline + settings.deltaTemp * rawValue;
-
+    function convertToPhysicalForPrediction(rawValue, x, y, settings) {
         return {
             rawValue,
-            xReal,
-            yReal,
-            tReal,
-            uReal
+            xReal: PLATE_LENGTH_M * x,
+            yReal: PLATE_LENGTH_M * y,
+            uReal: settings.baseline + settings.deltaTemp * rawValue
         };
     }
 
-    function getResultExplanation(physical, settings) {
-        const material = MATERIALS[settings.material] ?? MATERIALS.copper;
+    function getResultExplanation(physical) {
         return [
             `Model output: ${physical.rawValue.toFixed(4)} (dimensionless)`,
             `Converted temperature: ${physical.uReal.toFixed(4)} °C`,
-            `Physical time scale: ${physical.tReal.toFixed(2)} s`,
-            `Spatial position: x = ${(physical.xReal).toFixed(3)} m, y = ${(physical.yReal).toFixed(3)} m`,
-            `Plate length L = ${settings.lengthScale.toFixed(3)} m`,
-            `Material = ${material.label}`
+            `Spatial position: x = ${physical.xReal.toFixed(3)} m, y = ${physical.yReal.toFixed(3)} m`,
+            `Plate length L = ${PLATE_LENGTH_M.toFixed(3)} m (fixed)`
         ].join(' · ');
     }
 
@@ -116,10 +80,10 @@
             const data = JSON.parse(rawText);
             const rawValue = Number(data.predicted_temperature);
             const settings = getPhysicalSettings();
-            const physical = convertToPhysicalForPrediction(rawValue, x, y, t, settings);
+            const physical = convertToPhysicalForPrediction(rawValue, x, y, settings);
 
             resultDisplay.textContent = `${physical.uReal.toFixed(4)} °C`;
-            resultMeta.textContent = getResultExplanation(physical, settings);
+            resultMeta.textContent = getResultExplanation(physical);
 
         } catch (error) {
             resultDisplay.textContent = 'No result';
@@ -135,26 +99,9 @@
 
     function initializePredictUI() {
         const button = document.getElementById('predict-button');
-        const materialSelect = document.getElementById('material-select');
-
-        populateMaterialOptions();
 
         if (button) {
             button.addEventListener('click', handlePredict);
-        }
-
-        if (materialSelect) {
-            materialSelect.addEventListener('change', async () => {
-                const resultBox = document.getElementById('resultBox');
-                const errorContainer = document.getElementById('error-display');
-                if (resultBox) {
-                    resultBox.style.display = 'block';
-                }
-                if (errorContainer) {
-                    errorContainer.textContent = 'Material updated. Refreshing the physical conversion...';
-                }
-                await handlePredict();
-            });
         }
     }
 
