@@ -17,7 +17,7 @@ generic regression fit.
 
 ## Project Status
 
-Deployed at [text](https://pinn-ops.onrender.com/). CI pipeline active on `main`. 
+Deployed at https://pinn-ops.onrender.com/. CI pipeline active on `main`. 
 
 ---
 
