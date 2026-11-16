@@ -1,3 +1,5 @@
 /md_files
 *.pdf
 FastVPINN_Project_Reference.md
+__pycache__/
+*.pyc

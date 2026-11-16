@@ -17,7 +17,7 @@ generic regression fit.
 
 ## Project Status
 
-Deployed and benchmarked. CI pipeline active on `main`.
+Deployed at [text](https://pinn-ops.onrender.com/). CI pipeline active on `main`. 
 
 ---
 
@@ -94,10 +94,10 @@ To evaluate the impact of the variational weak-form formulation, a controlled 1:
 
 ### 2. Physical dimensional conversion
 
-While the core neural network operates over non-dimensional normalized domain bounds $(x, y, t) \in [0,1]^3$, the frontend client layer dynamically converts dimensionless model outputs into physical engineering quantities:
-* **Spatial Scaling**: $x_{\text{real}} = L \cdot x$, $y_{\text{real}} = L \cdot y$
-* **Temporal Scaling**: $t_{\text{real}} = \tau \cdot t$ where $\tau = \frac{L^2}{\alpha}$ (using material thermal diffusivity $\alpha$)
-* **Temperature Scaling**: $u_{\text{real}} = u_{\text{ref}} + \Delta T \cdot u$
+The core neural network operates over non-dimensional normalized domain bounds $(x, y, t) \in [0,1]^3$. The frontend converts the dimensionless model output into a temperature for display:
+* **Temperature Scaling**: $u_{\text{real}} = u_{\text{ref}} + \Delta T \cdot u$, with $u_{\text{ref}}$ and $\Delta T$ editable in the UI
+* **Spatial Display**: positions are shown for a square plate with a fixed side length $L = 0.1$ m ($x_{\text{real}} = L \cdot x$)
+* **Time**: kept in normalized model time $t \in [0,1]$; no conversion to seconds is applied
 
 ### 3. Compiled inference core
 
@@ -109,7 +109,7 @@ FastAPI on Uvicorn's ASGI server, running four parallel worker processes to use 
 
 ### 5. Hardened container
 
-Runs on an Alpine Linux base image. A dedicated `appuser` group/user is created at build time, with root dropped entirely before the Uvicorn runtime starts and build tooling stripped from the final image.
+Runs on the `python:3.13-slim` base image with CPU-only PyTorch. A dedicated `appuser` group/user is created at build time, with root dropped before the Uvicorn runtime starts. The port and worker count are configurable via the `PORT` and `WEB_CONCURRENCY` environment variables (defaults: 8000 and 1), and `GET /health` reports readiness.
 
 ### 6. GitOps continuous validation
 
@@ -142,7 +142,8 @@ These are end-to-end HTTP round-trip numbers (network + Pydantic validation + JI
 │   └── workflows/
 │       └── ci.yml                    # CI performance validation pipeline
 ├── PINN/
-│   └── fastvpinn_2d_heat.py          # CI performance validation pipeline
+│   ├── fastvpinn_2d_heat.py          # Weak-form FastVPINN training script
+│   └── standard_pinn_2d_heat.py      # Strong-form PINN baseline (ablation)
 ├── frontend/
 │   ├── index.html                    # UI layout
 │   ├── app.js                        # Single-point prediction: fetch + render logic

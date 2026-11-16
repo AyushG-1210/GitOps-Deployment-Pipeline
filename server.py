@@ -68,7 +68,14 @@ class CoordinateInput(BaseModel):
     t: float = Field(..., ge=0.0, le=1.0, description="Temporal coordinate t in [0, 1]")
 
 class BatchCoordinateInput(BaseModel):
-    points: List[CoordinateInput]
+    points: List[CoordinateInput] = Field(..., min_length=1, max_length=1000)
+
+# Health check for load balancers / hosting platforms
+@app.get("/health")
+async def health():
+    if model is None:
+        return JSONResponse(status_code=503, content={"status": "loading"})
+    return {"status": "ok"}
 
 # 4. Inference Endpoint
 @app.post("/predict")

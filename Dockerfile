@@ -4,19 +4,14 @@ FROM python:3.13-slim
 # Set working directory inside the container
 WORKDIR /app
 
-# Install system dependencies needed for basic compilation if any
-RUN apt-get update && apt-get install -y --no-install-recommends \
-    build-essential \
-    && rm -rf /var/lib/apt/lists/*
-
 # Copy requirements first to leverage Docker's layer caching
 COPY requirements.txt .
 
-# Install Python packages
-RUN pip install --upgrade pip
-RUN pip install --no-cache-dir -r requirements.txt
+# Install Python packages (CPU-only torch, see requirements.txt)
+RUN pip install --no-cache-dir --upgrade pip \
+    && pip install --no-cache-dir -r requirements.txt
 
-# Copy the server script and the trained weights into the container
+# Copy the server script, frontend and trained weights into the container
 COPY . .
 
 # Create a non-root user and set ownership of the app directory
@@ -24,9 +19,12 @@ RUN groupadd --system appgroup && useradd --system --gid appgroup --create-home 
 RUN chown -R appuser:appgroup /app
 USER appuser
 
-# Expose the port FastAPI runs on
+# Defaults; hosting platforms (Render, Cloud Run, ...) override PORT.
+# Each worker loads its own copy of torch (~300 MB), so keep this low on small plans.
+ENV PORT=8000 \
+    WEB_CONCURRENCY=1
+
 EXPOSE 8000
 
-# Command to run the application using Uvicorn
-CMD ["uvicorn", "server:app", "--host", "0.0.0.0", "--port", "8000", "--workers", "4"]
-
+# Shell form so ${PORT} is expanded at runtime; exec so uvicorn receives signals
+CMD exec uvicorn server:app --host 0.0.0.0 --port ${PORT} --workers ${WEB_CONCURRENCY}
